@@ -8,6 +8,7 @@ const FILL_COLOR = rgb(0.2, 0.1, 0.5); // Blue
 type TextMap = Map<string, number[]>;
 type RadioMap = Map<string, number[][]>;
 type CheckboxMap = Map<string, number[]>;
+type MultiSelectMap = Map<string, number[][]>;
 type ValueMap = Map<string, string>;
 
 type SettingsMap = {
@@ -16,6 +17,7 @@ type SettingsMap = {
   textMap: TextMap;
   radioMap: RadioMap;
   checkboxMap: CheckboxMap;
+  multiSelectMap: MultiSelectMap;
   values: ValueMap;
 };
 
@@ -33,6 +35,7 @@ async function buildDataMaps() {
   const textFields: TextMap = new Map([]);
   const radioFields: RadioMap = new Map([]);
   const checkboxFields: CheckboxMap = new Map([]);
+  const multiSelectFields: MultiSelectMap = new Map([]);
   for (const [lineIdx, rawLine] of positions.split("\n").entries()) {
     const line = rawLine.trim();
     if (!line.length || line.startsWith("#")) {
@@ -66,6 +69,17 @@ async function buildDataMaps() {
         parseFloat(y),
         parseInt(size),
       ]);
+    } else if (type === "m") {
+      const currentMultiSelectField = multiSelectFields.get(key) || [];
+      multiSelectFields.set(
+        key,
+        currentMultiSelectField.concat([[
+          parseInt(page),
+          parseFloat(x),
+          parseFloat(y),
+          parseInt(size),
+        ]]),
+      );
     } else {
       console.error(
         `Encounted unknown field type: '${type}' at line ${lineIdx + 1}`,
@@ -88,6 +102,7 @@ async function buildDataMaps() {
     textMap: textFields,
     radioMap: radioFields,
     checkboxMap: checkboxFields,
+    multiSelectMap: multiSelectFields,
     values: valuesMap,
   };
 }
@@ -153,6 +168,30 @@ async function modifyPdf(settings: SettingsMap) {
       size: size || 10,
       color: FILL_COLOR,
     });
+  }
+
+  for (const field of settings.multiSelectMap.entries()) {
+    const [fieldName, selectPositions] = field;
+    const selectedOptions = settings.values.get(fieldName);
+
+    if (!selectedOptions) {
+      continue;
+    }
+
+    for (const option of selectedOptions.split(";")) {
+      if (!option || !option.length) continue;
+      const [pageIndexAbsolute, x, y, size] = selectPositions[parseInt(option)];
+
+      const page = pages[pageIndexAbsolute - 1];
+      const { height } = page.getSize();
+
+      page.drawSquare({
+        x,
+        y: height - y,
+        size: size || 10,
+        color: FILL_COLOR,
+      });
+    }
   }
 
   const pdfBytes = await pdfDoc.save();
